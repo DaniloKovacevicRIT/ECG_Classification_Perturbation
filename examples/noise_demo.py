@@ -7,12 +7,17 @@ Run with:
 
 from __future__ import annotations
 
-import numpy as np
-
 import pathlib
 import sys
 
-sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+ROOT_DIR = pathlib.Path(__file__).resolve().parents[1]
+VENV_SITE = ROOT_DIR / ".venv" / "Lib" / "site-packages"
+if VENV_SITE.exists():
+    sys.path.insert(0, str(VENV_SITE))
+
+sys.path.append(str(ROOT_DIR))
+
+import numpy as np
 
 from perturbations import PerturbationConfig, apply_perturbation
 
