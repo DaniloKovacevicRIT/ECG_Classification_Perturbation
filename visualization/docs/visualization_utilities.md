@@ -100,6 +100,78 @@ def plot_classwise_metric_bars(metrics, *, metric_name='AUC', ax=None, title=Non
 - Creates grouped bars per class with conditions as offsets.
 - Y-axis limited to `[0,1]`.
 
+### 3.4 `plot_asr_vs_time`
+
+**Purpose**: Attack success rate vs. perturbation window center time (Section 2.1 aggregates).
+
+**Signature**:
+```python
+def plot_asr_vs_time(df_windows, *, bin_width=0.5, ax=None, title=None, show=True, save_path=None)
+```
+
+**Behavior**:
+
+- Expects a per-window summary DataFrame with `center_time` and `minimal_strength`/`strength_star_window`.
+- Bins center times (default 0.5 s) and computes ASR per bin.
+- Returns `(fig, ax)`; can optionally save to disk when `save_path` is provided.
+
+### 3.5 `plot_asr_time_class_heatmap`
+
+**Purpose**: Heatmap of ASR across time bins and diagnostic classes.
+
+**Signature**:
+```python
+def plot_asr_time_class_heatmap(df_windows, *, class_names=CLASS_NAMES, bin_width=0.5, ...)
+```
+
+**Behavior**:
+
+- Requires `df_windows` to contain `y_true_bits` (per-window class membership).
+- Builds a matrix of ASR per `(class, time bin)` and renders it via `imshow`.
+- Useful for highlighting when each class is most vulnerable.
+
+### 3.6 `plot_strength_histogram`
+
+**Purpose**: Distribution of minimal strengths across all samples (Section 2.2 aggregates).
+
+**Signature**:
+```python
+def plot_strength_histogram(df_samples, *, max_strength=0.5, bin_width=0.025, ...)
+```
+
+**Behavior**:
+
+- Takes the sample-level table produced by `summarize_minimal_strength_per_sample`.
+- Drops NaNs (robust samples) and renders a histogram.
+
+### 3.7 `plot_strength_boxplot_by_class`
+
+**Purpose**: Compare minimal strengths across classes.
+
+**Signature**:
+```python
+def plot_strength_boxplot_by_class(df_samples, *, class_names=CLASS_NAMES, ...)
+```
+
+**Behavior**:
+
+- Uses `y_true_bits` embedded in `df_samples` to split by class membership.
+- Produces boxplots (with means) for every class with at least one successful attack.
+
+### 3.8 `plot_robust_fraction_by_class`
+
+**Purpose**: Fraction of samples that remained robust (no success up to max strength) per class.
+
+**Signature**:
+```python
+def plot_robust_fraction_by_class(df_samples, *, class_names=CLASS_NAMES, ...)
+```
+
+**Behavior**:
+
+- Marks robustness as `strength_star_sample` being NaN.
+- Builds a bar chart over the provided class list.
+
 ## 4. Internal Helpers
 
 - `_ensure_axes`: utility to handle existing axes or create new figures with specified dimensions.

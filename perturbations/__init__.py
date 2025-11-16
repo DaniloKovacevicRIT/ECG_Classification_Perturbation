@@ -16,10 +16,15 @@ from .evaluation import (
 from .morphology import detect_r_peaks, local_amplitude_scaling, local_time_warp
 from .noise import band_limited_noise, baseline_wander
 from visualization import (
+    plot_asr_time_class_heatmap,
     plot_asr_vs_strength,
+    plot_asr_vs_time,
     plot_classwise_metric_bars,
     plot_norm_distributions,
     plot_overlay_with_diff,
+    plot_robust_fraction_by_class,
+    plot_strength_boxplot_by_class,
+    plot_strength_histogram,
     plot_triptych,
 )
 
@@ -46,6 +51,11 @@ __all__ = [
     "plot_triptych",
     "plot_overlay_with_diff",
     "plot_asr_vs_strength",
+    "plot_asr_vs_time",
+    "plot_asr_time_class_heatmap",
     "plot_norm_distributions",
     "plot_classwise_metric_bars",
+    "plot_strength_histogram",
+    "plot_strength_boxplot_by_class",
+    "plot_robust_fraction_by_class",
 ]

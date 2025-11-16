@@ -4,7 +4,7 @@ Visualization utilities for ECG perturbations.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,9 +16,39 @@ from perturbations.evaluation import AttackResult, results_to_dataframe
 
 def _ensure_axes(ax=None, nrows=1, ncols=1, figsize=(10, 6)):
     if ax is not None:
-        return None, ax
+        return ax.figure, ax
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
     return fig, axes
+
+
+def _label_matrix_from_series(series: pd.Series, class_count: int) -> np.ndarray:
+    rows: List[np.ndarray] = []
+    for value in series:
+        arr = np.asarray(value, dtype=int)
+        if arr.size != class_count:
+            raise ValueError(
+                f"y_true_bits entries must have length {class_count}, received {arr.size}"
+            )
+        rows.append(arr)
+    if not rows:
+        return np.zeros((0, class_count), dtype=int)
+    return np.vstack(rows)
+
+
+def _compute_asr_bins(
+    times: np.ndarray,
+    success_mask: np.ndarray,
+    bin_edges: np.ndarray,
+) -> np.ndarray:
+    asr = np.full(len(bin_edges) - 1, np.nan, dtype=float)
+    for idx in range(len(bin_edges) - 1):
+        start, end = bin_edges[idx], bin_edges[idx + 1]
+        mask = (times >= start) & (times < end)
+        total = mask.sum()
+        if total:
+            successes = success_mask[mask].sum()
+            asr[idx] = successes / total
+    return asr
 
 
 def plot_triptych(
@@ -224,4 +254,230 @@ def plot_classwise_metric_bars(
     if title:
         ax.set_title(title)
     fig.tight_layout()
+    return fig, ax
+
+
+def plot_asr_vs_time(
+    df_windows: pd.DataFrame,
+    *,
+    bin_width: float = 0.5,
+    ax: Optional[plt.Axes] = None,
+    title: Optional[str] = None,
+    show: bool = True,
+    save_path: Optional[str] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Plot untargeted ASR against window center time.
+    """
+
+    if df_windows.empty:
+        raise ValueError("df_windows is empty; nothing to plot.")
+    metric_col = "strength_star_window" if "strength_star_window" in df_windows else "minimal_strength"
+    centers = df_windows["center_time"].to_numpy(dtype=float)
+    duration = max(10.0, float(np.nanmax(centers)) if centers.size else 10.0)
+    bin_edges = np.arange(0.0, duration + bin_width, bin_width)
+    if len(bin_edges) < 2:
+        bin_edges = np.array([0.0, bin_width])
+    success_mask = df_windows[metric_col].notna().to_numpy()
+    asr = _compute_asr_bins(centers, success_mask.astype(float), bin_edges)
+    bin_centers = bin_edges[:-1] + bin_width / 2
+
+    fig, ax = _ensure_axes(ax, figsize=(8, 4))
+    ax.plot(bin_centers, asr, marker="o")
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Window Center Time (s)")
+    ax.set_ylabel("Attack Success Rate")
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig, ax
+
+
+def plot_asr_time_class_heatmap(
+    df_windows: pd.DataFrame,
+    *,
+    class_names: Sequence[str] = CLASS_NAMES,
+    bin_width: float = 0.5,
+    ax: Optional[plt.Axes] = None,
+    title: Optional[str] = None,
+    show: bool = True,
+    save_path: Optional[str] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Heatmap of ASR as a function of time and class membership.
+    """
+
+    if df_windows.empty:
+        raise ValueError("df_windows is empty; nothing to plot.")
+    metric_col = "strength_star_window" if "strength_star_window" in df_windows else "minimal_strength"
+    centers = df_windows["center_time"].to_numpy(dtype=float)
+    duration = max(10.0, float(np.nanmax(centers)) if centers.size else 10.0)
+    bin_edges = np.arange(0.0, duration + bin_width, bin_width)
+    if len(bin_edges) < 2:
+        bin_edges = np.array([0.0, bin_width])
+    label_matrix = _label_matrix_from_series(df_windows["y_true_bits"], len(class_names))
+    success_mask = df_windows[metric_col].notna().to_numpy()
+    heatmap = np.full((len(class_names), len(bin_edges) - 1), np.nan, dtype=float)
+
+    for idx, _ in enumerate(class_names):
+        class_rows = label_matrix[:, idx] == 1
+        if not np.any(class_rows):
+            continue
+        class_asr = _compute_asr_bins(
+            centers[class_rows],
+            success_mask[class_rows].astype(float),
+            bin_edges,
+        )
+        heatmap[idx] = class_asr
+
+    fig, ax = _ensure_axes(ax, figsize=(10, 4))
+    cax = ax.imshow(
+        heatmap,
+        aspect="auto",
+        origin="lower",
+        interpolation="nearest",
+        extent=[bin_edges[0], bin_edges[-1], -0.5, len(class_names) - 0.5],
+        vmin=0.0,
+        vmax=1.0,
+        cmap="viridis",
+    )
+    ax.set_yticks(range(len(class_names)))
+    ax.set_yticklabels(class_names)
+    ax.set_xlabel("Window Center Time (s)")
+    ax.set_ylabel("Class")
+    if title:
+        ax.set_title(title)
+    fig.colorbar(cax, ax=ax, label="ASR")
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig, ax
+
+
+def plot_strength_histogram(
+    df_samples: pd.DataFrame,
+    *,
+    max_strength: float = 0.5,
+    bin_width: float = 0.025,
+    ax: Optional[plt.Axes] = None,
+    title: Optional[str] = None,
+    show: bool = True,
+    save_path: Optional[str] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Histogram of minimal strengths across samples.
+    """
+
+    strengths = df_samples["strength_star_sample"].dropna().to_numpy(dtype=float)
+    bins = np.arange(0.0, max_strength + bin_width, bin_width)
+    if strengths.size == 0:
+        raise ValueError("No successful samples to plot.")
+    fig, ax = _ensure_axes(ax, figsize=(8, 4))
+    ax.hist(strengths, bins=bins, color="tab:blue", alpha=0.8)
+    ax.set_xlabel("Minimal Strength*")
+    ax.set_ylabel("Count")
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig, ax
+
+
+def plot_strength_boxplot_by_class(
+    df_samples: pd.DataFrame,
+    *,
+    class_names: Sequence[str] = CLASS_NAMES,
+    ax: Optional[plt.Axes] = None,
+    title: Optional[str] = None,
+    show: bool = True,
+    save_path: Optional[str] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Boxplots of minimal strength grouped by ground-truth class.
+    """
+
+    label_matrix = _label_matrix_from_series(df_samples["y_true_bits"], len(class_names))
+    strengths = df_samples["strength_star_sample"].to_numpy()
+    data: List[np.ndarray] = []
+    class_labels: List[str] = []
+    for idx, name in enumerate(class_names):
+        class_mask = label_matrix[:, idx] == 1
+        class_strengths = strengths[class_mask]
+        class_strengths = class_strengths[~np.isnan(class_strengths)]
+        if class_strengths.size == 0:
+            continue
+        data.append(class_strengths)
+        class_labels.append(name)
+    if not data:
+        raise ValueError("No class-specific data available for boxplot.")
+
+    fig, ax = _ensure_axes(ax, figsize=(10, 4))
+    ax.boxplot(data, labels=class_labels, showmeans=True)
+    ax.set_ylabel("Minimal Strength*")
+    ax.set_xlabel("Class")
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig, ax
+
+
+def plot_robust_fraction_by_class(
+    df_samples: pd.DataFrame,
+    *,
+    class_names: Sequence[str] = CLASS_NAMES,
+    ax: Optional[plt.Axes] = None,
+    title: Optional[str] = None,
+    show: bool = True,
+    save_path: Optional[str] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Bar chart of the fraction of robust samples per class.
+    """
+
+    label_matrix = _label_matrix_from_series(df_samples["y_true_bits"], len(class_names))
+    robust_mask = df_samples["strength_star_sample"].isna().to_numpy()
+    fractions: List[float] = []
+    for idx in range(len(class_names)):
+        class_mask = label_matrix[:, idx] == 1
+        if not np.any(class_mask):
+            fractions.append(np.nan)
+        else:
+            fractions.append(float(np.mean(robust_mask[class_mask])))
+
+    fig, ax = _ensure_axes(ax, figsize=(8, 4))
+    ax.bar(range(len(class_names)), fractions, color="tab:green")
+    ax.set_xticks(range(len(class_names)))
+    ax.set_xticklabels(class_names)
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("Robust Fraction")
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
     return fig, ax
