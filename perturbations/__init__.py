@@ -13,6 +13,7 @@ from .evaluation import (
     summarize_norms,
     summarize_smoothness,
 )
+from .morphology import detect_r_peaks, local_amplitude_scaling, local_time_warp
 from .noise import band_limited_noise, baseline_wander
 from .visualization import (
     plot_asr_vs_strength,
@@ -27,6 +28,9 @@ __all__ = [
     "apply_perturbation",
     "baseline_wander",
     "band_limited_noise",
+    "local_amplitude_scaling",
+    "local_time_warp",
+    "detect_r_peaks",
     "smooth_adversarial_perturbation",
     "AttackResult",
     "predict_proba_single",

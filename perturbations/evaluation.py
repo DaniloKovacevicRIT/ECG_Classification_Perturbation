@@ -90,6 +90,7 @@ def run_attack_on_sample(
     rng: Optional[np.random.Generator] = None,
     threshold: float = 0.5,
     compute_delta_smoothness: bool = True,
+    r_peaks: Optional[Sequence[int]] = None,
 ) -> Tuple[AttackResult, np.ndarray]:
     """
     Apply the configured perturbation, evaluate predictions, and log results.
@@ -104,6 +105,7 @@ def run_attack_on_sample(
         config=config,
         model=model,
         y_true=y_true,
+        r_peaks=r_peaks,
         rng=rng,
     )
 

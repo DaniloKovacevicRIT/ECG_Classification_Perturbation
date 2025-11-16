@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Sequence
 import numpy as np
 
 from .adv_smooth import smooth_adversarial_perturbation
+from .morphology import local_amplitude_scaling, local_time_warp
 from .noise import band_limited_noise, baseline_wander
 
 
@@ -65,6 +66,26 @@ def apply_perturbation(
             window_seconds=window_seconds,
             beta=config.get_extra("beta"),
             band=config.get_extra("band"),
+            rng=rng,
+        )
+    if ptype == "morph_amp":
+        if r_peaks is None:
+            raise ValueError("morph_amp requires r_peaks for the sample.")
+        return local_amplitude_scaling(
+            x,
+            fs=fs,
+            config=config,
+            r_peaks=r_peaks,
+            rng=rng,
+        )
+    if ptype == "morph_time":
+        if r_peaks is None:
+            raise ValueError("morph_time requires r_peaks for the sample.")
+        return local_time_warp(
+            x,
+            fs=fs,
+            config=config,
+            r_peaks=r_peaks,
             rng=rng,
         )
     if ptype == "smooth_adv":
