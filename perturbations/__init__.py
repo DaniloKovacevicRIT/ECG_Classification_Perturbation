@@ -1,3 +1,4 @@
+from .adv_smooth import smooth_adversarial_perturbation
 from .api import PerturbationConfig, apply_perturbation
 from .evaluation import (
     AttackResult,
@@ -26,6 +27,7 @@ __all__ = [
     "apply_perturbation",
     "baseline_wander",
     "band_limited_noise",
+    "smooth_adversarial_perturbation",
     "AttackResult",
     "predict_proba_single",
     "predict_proba_batch",

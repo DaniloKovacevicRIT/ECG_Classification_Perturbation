@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
+from .adv_smooth import smooth_adversarial_perturbation
 from .noise import band_limited_noise, baseline_wander
 
 
@@ -31,6 +32,7 @@ def apply_perturbation(
     fs: float,
     config: PerturbationConfig,
     model: Optional[Any] = None,
+    y_true: Optional[np.ndarray] = None,
     r_peaks: Optional[Sequence[int]] = None,
     rng: Optional[np.random.Generator] = None,
 ) -> np.ndarray:
@@ -65,6 +67,18 @@ def apply_perturbation(
             band=config.get_extra("band"),
             rng=rng,
         )
+    if ptype == "smooth_adv":
+        if model is None:
+            raise ValueError("smooth_adv perturbations require a model instance.")
+        if y_true is None:
+            raise ValueError("smooth_adv perturbations require the true label vector.")
+        x_adv, _ = smooth_adversarial_perturbation(
+            x,
+            fs=fs,
+            config=config,
+            model=model,
+            y_true=y_true,
+        )
+        return x_adv
 
     raise ValueError(f"Unsupported perturbation type '{config.ptype}' for current implementation.")
-

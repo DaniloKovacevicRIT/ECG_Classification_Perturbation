@@ -98,7 +98,14 @@ def run_attack_on_sample(
     x_clean = np.asarray(x_clean, dtype=np.float32)
     y_true = np.asarray(y_true, dtype=int)
 
-    x_adv = apply_perturbation(x_clean, fs=fs, config=config, rng=rng)
+    x_adv = apply_perturbation(
+        x_clean,
+        fs=fs,
+        config=config,
+        model=model,
+        y_true=y_true,
+        rng=rng,
+    )
 
     proba_clean = predict_proba_single(model, x_clean)
     proba_adv = predict_proba_single(model, x_adv)
@@ -291,4 +298,3 @@ def compute_global_metrics(
     metrics["f1_per_class"] = dict(zip(CLASS_NAMES, f1))
     metrics["f1_macro"] = float(np.mean(f1))
     return metrics
-
