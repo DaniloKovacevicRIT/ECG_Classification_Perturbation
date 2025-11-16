@@ -1,6 +1,6 @@
-# Visualization Utilities
+﻿# Visualization Utilities
 
-This document explains the plotting helpers contained in `perturbations/visualization.py`. These utilities transform raw perturbation data into interpretable figures for both per-sample inspection and aggregate analysis.
+This document explains the plotting helpers contained in `visualization/visualization.py`. These utilities transform raw perturbation data into interpretable figures for both per-sample inspection and aggregate analysis.
 
 ## 1. Design Goals
 
@@ -26,7 +26,7 @@ def plot_triptych(x_clean, x_adv, *, fs, lead_idx=1, title=None, zoom=None, shar
 - Plots three stacked panels:
   1. Clean signal.
   2. Perturbed signal (with optional shared y-limits).
-  3. Difference (`x_adv - x_clean`) with zero reference line and max-Δ annotation.
+  3. Difference (`x_adv - x_clean`) with zero reference line and max-Î” annotation.
 - Optional `zoom=(t_start, t_end)` restricts the x-axis to a specific time window.
 
 **Use Cases**:
@@ -72,7 +72,7 @@ fig, ax = plot_asr_vs_strength(results, title='ASR vs Strength')
 
 ### 3.2 `plot_norm_distributions`
 
-**Purpose**: Visualize L2/L∞ norm distributions across perturbation types/strengths via boxplots.
+**Purpose**: Visualize L2/Lâˆž norm distributions across perturbation types/strengths via boxplots.
 
 **Signature**:
 ```python
@@ -126,5 +126,5 @@ To add new visualizations:
 2. Reuse `_ensure_axes` for consistent figure creation.
 3. Document the new plot in this file and, if applicable, integrate it into the notebook.
 
-By centralizing plotting logic in `perturbations/visualization.py`, we keep visuals consistent and reusable across experiments and notebooks.
+By centralizing plotting logic in `visualization/visualization.py`, we keep visuals consistent and reusable across experiments and notebooks.
 

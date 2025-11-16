@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .config import CLASS_NAMES
-from .evaluation import AttackResult, results_to_dataframe
+from perturbations.config import CLASS_NAMES
+from perturbations.evaluation import AttackResult, results_to_dataframe
 
 
 def _ensure_axes(ax=None, nrows=1, ncols=1, figsize=(10, 6)):
@@ -225,4 +225,3 @@ def plot_classwise_metric_bars(
         ax.set_title(title)
     fig.tight_layout()
     return fig, ax
-

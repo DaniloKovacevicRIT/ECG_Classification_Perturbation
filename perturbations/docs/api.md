@@ -1,4 +1,4 @@
-# Perturbation API Overview
+﻿# Perturbation API Overview
 
 This document describes the public API layer exposed via `perturbations/__init__.py` and implemented in `perturbations/api.py`. It explains how the dispatcher works, how each perturbation family is routed, and how to integrate the API into notebooks or scripts.
 
@@ -6,7 +6,7 @@ This document describes the public API layer exposed via `perturbations/__init__
 
 - **`PerturbationConfig`** (`perturbations/api.py:12-23`): dataclass capturing perturbation type, strength, temporal window, targeting info, and a flexible `extra` dict for type-specific parameters.
 - **`apply_perturbation`** (`api.py:30-101`): central dispatcher that accepts an ECG segment and applies the configured perturbation, delegating to the appropriate implementation (noise, smooth adversary, morphology).
-- **Helper exports**: `perturbations/__init__.py` also re-exports evaluation and visualization helpers for convenience (see `docs/evaluation_utilities.md` and `docs/visualization_utilities.md`).
+- **Helper exports**: `perturbations/__init__.py` also re-exports evaluation and visualization helpers for convenience (see `docs/evaluation_utilities.md` and `visualization/visualization_utilities.md`).
 
 ## 2. PerturbationConfig Fields
 
@@ -30,13 +30,13 @@ class PerturbationConfig:
 - `target_class`: used by `smooth_adv` for targeted attacks; irrelevant for noise/morphology.# Design Document: Plausible ECG Perturbations for Targeted Misclassification
 
 ## 1. Context & Goals
-We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTB‑XL ECG segments stored under `ptb-xl/`. Each record is a 10 s, 12‑lead trace sampled at 100 Hz (1 000 samples × 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
+We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTBâ€‘XL ECG segments stored under `ptb-xl/`. Each record is a 10â€¯s, 12â€‘lead trace sampled at 100â€¯Hz (1â€¯000 samples Ã— 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
 
 ## 2. Reference Training Pipeline Snapshot
 
 ### 2.1 Dataset & Labels
 - CSV metadata (`ptbxl_database.csv`) is read into `Y`, and `scp_codes` are expanded via `ast.literal_eval`.
-- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100 Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
+- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100â€¯Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
 - Diagnostic subclasses are aggregated through `scp_statements.csv`, filtered to the `diagnostic` rows, and mapped onto the five superclasses above.
 - A stratified split uses `strat_fold != 10` for training and `== 10` for testing, resulting in `(X_train, y_train)` and `(X_test, y_test)`. Encoding with `MultiLabelBinarizer` produces `y_*_enc` arrays of shape `(num_records, 5)`.
 
@@ -73,11 +73,11 @@ The perturbation pipeline must preserve these conventions: keep tensors in the `
 - **Type I (digital) white-box:** we directly edit stored test signals (`X_test`) and have access to model parameters and gradients via TensorFlow.
 - **Objectives:**
   - Untargeted: alter the predicted label set relative to the baseline set obtained with a 0.5 sigmoid threshold.
-  - Targeted: force a specific superclass to be predicted (set probability ≥ threshold) or suppress an existing positive class (probability < threshold).
+  - Targeted: force a specific superclass to be predicted (set probability â‰¥ threshold) or suppress an existing positive class (probability < threshold).
 - **Budget:** perturbations must stay within an L2 norm scaled by the `strength` knob and remain temporally localized via the `center_time` / `window_seconds` interface.
 
 ### 4.2 Plausibility Constraints
-- Preserve recognizable P–QRS–T morphology and heart rhythm.
+- Preserve recognizable Pâ€“QRSâ€“T morphology and heart rhythm.
 - Keep changes smooth in time and coherent across leads (no single-sample spikes).
 - Limit edits to windows that can pass as baseline wander, powerline noise, or small morphology variations.
 - Provide smooth onset/offset windows (Hann or cosine masks) and penalize high first-order derivatives of the perturbation.
@@ -119,14 +119,14 @@ def apply_perturbation(
 - All perturbation functions operate on NumPy arrays for compatibility with the notebook; gradient-based ones temporarily convert to `tf.Tensor` for differentiation.
 
 ### 5.3 Perturbation Families
-1. **Smooth adversarial perturbations** (`smooth_adv`) — gradient-driven, smooth, windowed.
-2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) — parametric noise injections.
-3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) — interpretable edits tied to detected beats.
+1. **Smooth adversarial perturbations** (`smooth_adv`) â€” gradient-driven, smooth, windowed.
+2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) â€” parametric noise injections.
+3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) â€” interpretable edits tied to detected beats.
 
 ## 6. Perturbation Family 1: Smooth Gradient-Based Adversary (`smooth_adv`)
 
 ### 6.1 Objective
-We optimize a mask-localized perturbation `δ` that maximizes misclassification while staying smooth and energy-bounded:
+We optimize a mask-localized perturbation `Î´` that maximizes misclassification while staying smooth and energy-bounded:
 
 \[
 L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} L_{\text{smooth}}(\delta) + \lambda_{\text{energy}} L_{\text{energy}}(\delta)
@@ -137,13 +137,13 @@ L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} 
 - `L_energy`: average squared magnitude.
 
 ### 6.2 Time Window Mask
-Given `center_time` and `window_seconds` (default 2 s), we compute sample indices at 100 Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10 s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
+Given `center_time` and `window_seconds` (default 2â€¯s), we compute sample indices at 100â€¯Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10â€¯s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
 
 ### 6.3 Strength Mapping
-- `strength` ∈ [0, 1].
+- `strength` âˆˆ [0, 1].
 - `eps_global_max` (default 0.5) is expressed in the normalized input space (raw WFDB units for the current notebook). `eps_max = strength * eps_global_max`.
-- After each optimizer step we rescale `δ` to satisfy `||δ||₂ ≤ eps_max`.
-- `strength` can additionally scale `λ_smooth` and `λ_energy` (larger strengths relax the penalties).
+- After each optimizer step we rescale `Î´` to satisfy `||Î´||â‚‚ â‰¤ eps_max`.
+- `strength` can additionally scale `Î»_smooth` and `Î»_energy` (larger strengths relax the penalties).
 
 ### 6.4 TensorFlow Implementation Sketch
 ```python
@@ -204,50 +204,50 @@ def smooth_adversarial_perturbation(x_np, fs, config, model, y_true_vec):
 ```
 
 ### 6.5 Plausibility Checks
-- Log per-sample L2/L∞ norms in both normalized and µV units.
+- Log per-sample L2/Lâˆž norms in both normalized and ÂµV units.
 - Track `L_smooth` and energy penalties; abort or downscale when limits are exceeded.
 - Overlay `x`/`x_adv` for random records and ensure thresholded predictions changed as intended.
 
 ## 7. Perturbation Family 2: Acquisition-Style Noise
 
 ### 7.1 Baseline Wander (`baseline_wander`)
-- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2π f t + φ_c)` with `f ∈ [0.05, 0.5]` Hz and random phases.
-- Amplitude `A_c = strength * α * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
+- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2Ï€ f t + Ï†_c)` with `f âˆˆ [0.05, 0.5]` Hz and random phases.
+- Amplitude `A_c = strength * Î± * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
 - Apply the same Hann-mask window before adding to `x`.
 
 ### 7.2 Band-Limited Noise (`band_noise`)
-- Create white noise per lead, filter with a Butterworth band-pass (default 5–40 Hz), rescale to unit variance, then multiply by `strength * β * std_c`.
+- Create white noise per lead, filter with a Butterworth band-pass (default 5â€“40â€¯Hz), rescale to unit variance, then multiply by `strength * Î² * std_c`.
 - Window with the same mask and add to `x`.
 
-### 7.3 Combining with Adversarial δ
+### 7.3 Combining with Adversarial Î´
 - Generate `x_adv` via `smooth_adv`.
 - Draw a noise config (`baseline_wander` or `band_noise`) with its own `strength`, apply it to `x_adv`, and feed the result to the model.
 
 ## 8. Perturbation Family 3: Morphology-Aware Warps
 
 ### 8.1 Beat Detection
-- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100 Hz.
+- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100â€¯Hz.
 - Cache results next to `X_test` to avoid recomputation inside the notebook.
 
 ### 8.2 Local Amplitude Scaling (`morph_amp`)
-- For beats within the selected time window, multiply samples in a Gaussian neighborhood (σ ≈ 80 ms by default) by a gain `1 + γ`, where `γ ∈ [-γ_max, γ_max]` and `γ_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
+- For beats within the selected time window, multiply samples in a Gaussian neighborhood (Ïƒ â‰ˆ 80â€¯ms by default) by a gain `1 + Î³`, where `Î³ âˆˆ [-Î³_max, Î³_max]` and `Î³_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
 - Gains can be independent per lead or tied across limb/precordial groups to maintain clinical plausibility.
 
 ### 8.3 Local Time Warping (`morph_time`)
 - Select `[a, b]` windows surrounding each targeted beat (e.g., `r_k - 40` to `r_k + 60` samples).
-- Define a warp factor `ε ∈ [-ε_max, ε_max]`, scale `τ` ∈ [0, 1] to `(1 + ε)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
+- Define a warp factor `Îµ âˆˆ [-Îµ_max, Îµ_max]`, scale `Ï„` âˆˆ [0, 1] to `(1 + Îµ)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
 - Enforce continuity at window edges by blending with the original signal using the Hann mask.
 
 ### 8.4 Strength Interpretation
-- `strength` controls γ and ε maxima; keep them ≤ 15% so morphology changes remain subtle.
-- Enforce per-beat caps (e.g., only edit one or two beats per 10 s window for strength ≤ 0.3).
+- `strength` controls Î³ and Îµ maxima; keep them â‰¤ 15% so morphology changes remain subtle.
+- Enforce per-beat caps (e.g., only edit one or two beats per 10â€¯s window for strength â‰¤ 0.3).
 
 ## 9. Interface: Strength & Time Knobs
 - `strength` is a normalized knob interpreted per perturbation family:
   - `smooth_adv`: L2 budget.
   - `baseline_wander` / `band_noise`: amplitude relative to per-lead std.
   - `morph_amp` / `morph_time`: bounding box for amplitude/time scaling.
-- `center_time` specifies the focal point in seconds (0 ≤ center_time ≤ 10). `window_seconds` defaults to 2 s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
+- `center_time` specifies the focal point in seconds (0â€¯â‰¤â€¯center_timeâ€¯â‰¤â€¯10). `window_seconds` defaults to 2â€¯s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
 
 Example defaults:
 ```python
@@ -266,7 +266,7 @@ perturbations/
   __init__.py
   config.py            # defaults, class-to-index map
   masks.py             # time-window utilities for NumPy / TensorFlow
-  metrics.py           # smoothness, L2/L∞ helpers
+  metrics.py           # smoothness, L2/Lâˆž helpers
   adv_smooth.py        # TensorFlow implementation of smooth_adv
   noise.py             # baseline_wander and band_noise
   morphology.py        # morph_amp / morph_time utilities
@@ -290,7 +290,7 @@ pred_adv = (model.predict(x_adv[None, ...]) >= 0.5)
    - Compare predicted label vectors (threshold 0.5) before and after perturbation.
    - Report untargeted ASR and per-class targeted success rates across `X_test`.
 2. **Perturbation Budgets:**
-   - L2/L∞ norms per record alongside strength values.
+   - L2/Lâˆž norms per record alongside strength values.
    - Smoothness metrics vs. baseline variability between beats.
 3. **Plausibility:**
    - Visual overlays of clean vs. perturbed signals for random samples (per lead).
@@ -311,13 +311,13 @@ With this alignment, the perturbation engine can be dropped into the existing Te
 # Design Document: Plausible ECG Perturbations for Targeted Misclassification
 
 ## 1. Context & Goals
-We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTB‑XL ECG segments stored under `ptb-xl/`. Each record is a 10 s, 12‑lead trace sampled at 100 Hz (1 000 samples × 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
+We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTBâ€‘XL ECG segments stored under `ptb-xl/`. Each record is a 10â€¯s, 12â€‘lead trace sampled at 100â€¯Hz (1â€¯000 samples Ã— 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
 
 ## 2. Reference Training Pipeline Snapshot
 
 ### 2.1 Dataset & Labels
 - CSV metadata (`ptbxl_database.csv`) is read into `Y`, and `scp_codes` are expanded via `ast.literal_eval`.
-- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100 Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
+- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100â€¯Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
 - Diagnostic subclasses are aggregated through `scp_statements.csv`, filtered to the `diagnostic` rows, and mapped onto the five superclasses above.
 - A stratified split uses `strat_fold != 10` for training and `== 10` for testing, resulting in `(X_train, y_train)` and `(X_test, y_test)`. Encoding with `MultiLabelBinarizer` produces `y_*_enc` arrays of shape `(num_records, 5)`.
 
@@ -354,11 +354,11 @@ The perturbation pipeline must preserve these conventions: keep tensors in the `
 - **Type I (digital) white-box:** we directly edit stored test signals (`X_test`) and have access to model parameters and gradients via TensorFlow.
 - **Objectives:**
   - Untargeted: alter the predicted label set relative to the baseline set obtained with a 0.5 sigmoid threshold.
-  - Targeted: force a specific superclass to be predicted (set probability ≥ threshold) or suppress an existing positive class (probability < threshold).
+  - Targeted: force a specific superclass to be predicted (set probability â‰¥ threshold) or suppress an existing positive class (probability < threshold).
 - **Budget:** perturbations must stay within an L2 norm scaled by the `strength` knob and remain temporally localized via the `center_time` / `window_seconds` interface.
 
 ### 4.2 Plausibility Constraints
-- Preserve recognizable P–QRS–T morphology and heart rhythm.
+- Preserve recognizable Pâ€“QRSâ€“T morphology and heart rhythm.
 - Keep changes smooth in time and coherent across leads (no single-sample spikes).
 - Limit edits to windows that can pass as baseline wander, powerline noise, or small morphology variations.
 - Provide smooth onset/offset windows (Hann or cosine masks) and penalize high first-order derivatives of the perturbation.
@@ -400,14 +400,14 @@ def apply_perturbation(
 - All perturbation functions operate on NumPy arrays for compatibility with the notebook; gradient-based ones temporarily convert to `tf.Tensor` for differentiation.
 
 ### 5.3 Perturbation Families
-1. **Smooth adversarial perturbations** (`smooth_adv`) — gradient-driven, smooth, windowed.
-2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) — parametric noise injections.
-3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) — interpretable edits tied to detected beats.
+1. **Smooth adversarial perturbations** (`smooth_adv`) â€” gradient-driven, smooth, windowed.
+2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) â€” parametric noise injections.
+3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) â€” interpretable edits tied to detected beats.
 
 ## 6. Perturbation Family 1: Smooth Gradient-Based Adversary (`smooth_adv`)
 
 ### 6.1 Objective
-We optimize a mask-localized perturbation `δ` that maximizes misclassification while staying smooth and energy-bounded:
+We optimize a mask-localized perturbation `Î´` that maximizes misclassification while staying smooth and energy-bounded:
 
 \[
 L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} L_{\text{smooth}}(\delta) + \lambda_{\text{energy}} L_{\text{energy}}(\delta)
@@ -418,13 +418,13 @@ L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} 
 - `L_energy`: average squared magnitude.
 
 ### 6.2 Time Window Mask
-Given `center_time` and `window_seconds` (default 2 s), we compute sample indices at 100 Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10 s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
+Given `center_time` and `window_seconds` (default 2â€¯s), we compute sample indices at 100â€¯Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10â€¯s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
 
 ### 6.3 Strength Mapping
-- `strength` ∈ [0, 1].
+- `strength` âˆˆ [0, 1].
 - `eps_global_max` (default 0.5) is expressed in the normalized input space (raw WFDB units for the current notebook). `eps_max = strength * eps_global_max`.
-- After each optimizer step we rescale `δ` to satisfy `||δ||₂ ≤ eps_max`.
-- `strength` can additionally scale `λ_smooth` and `λ_energy` (larger strengths relax the penalties).
+- After each optimizer step we rescale `Î´` to satisfy `||Î´||â‚‚ â‰¤ eps_max`.
+- `strength` can additionally scale `Î»_smooth` and `Î»_energy` (larger strengths relax the penalties).
 
 ### 6.4 TensorFlow Implementation Sketch
 ```python
@@ -485,50 +485,50 @@ def smooth_adversarial_perturbation(x_np, fs, config, model, y_true_vec):
 ```
 
 ### 6.5 Plausibility Checks
-- Log per-sample L2/L∞ norms in both normalized and µV units.
+- Log per-sample L2/Lâˆž norms in both normalized and ÂµV units.
 - Track `L_smooth` and energy penalties; abort or downscale when limits are exceeded.
 - Overlay `x`/`x_adv` for random records and ensure thresholded predictions changed as intended.
 
 ## 7. Perturbation Family 2: Acquisition-Style Noise
 
 ### 7.1 Baseline Wander (`baseline_wander`)
-- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2π f t + φ_c)` with `f ∈ [0.05, 0.5]` Hz and random phases.
-- Amplitude `A_c = strength * α * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
+- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2Ï€ f t + Ï†_c)` with `f âˆˆ [0.05, 0.5]` Hz and random phases.
+- Amplitude `A_c = strength * Î± * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
 - Apply the same Hann-mask window before adding to `x`.
 
 ### 7.2 Band-Limited Noise (`band_noise`)
-- Create white noise per lead, filter with a Butterworth band-pass (default 5–40 Hz), rescale to unit variance, then multiply by `strength * β * std_c`.
+- Create white noise per lead, filter with a Butterworth band-pass (default 5â€“40â€¯Hz), rescale to unit variance, then multiply by `strength * Î² * std_c`.
 - Window with the same mask and add to `x`.
 
-### 7.3 Combining with Adversarial δ
+### 7.3 Combining with Adversarial Î´
 - Generate `x_adv` via `smooth_adv`.
 - Draw a noise config (`baseline_wander` or `band_noise`) with its own `strength`, apply it to `x_adv`, and feed the result to the model.
 
 ## 8. Perturbation Family 3: Morphology-Aware Warps
 
 ### 8.1 Beat Detection
-- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100 Hz.
+- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100â€¯Hz.
 - Cache results next to `X_test` to avoid recomputation inside the notebook.
 
 ### 8.2 Local Amplitude Scaling (`morph_amp`)
-- For beats within the selected time window, multiply samples in a Gaussian neighborhood (σ ≈ 80 ms by default) by a gain `1 + γ`, where `γ ∈ [-γ_max, γ_max]` and `γ_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
+- For beats within the selected time window, multiply samples in a Gaussian neighborhood (Ïƒ â‰ˆ 80â€¯ms by default) by a gain `1 + Î³`, where `Î³ âˆˆ [-Î³_max, Î³_max]` and `Î³_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
 - Gains can be independent per lead or tied across limb/precordial groups to maintain clinical plausibility.
 
 ### 8.3 Local Time Warping (`morph_time`)
 - Select `[a, b]` windows surrounding each targeted beat (e.g., `r_k - 40` to `r_k + 60` samples).
-- Define a warp factor `ε ∈ [-ε_max, ε_max]`, scale `τ` ∈ [0, 1] to `(1 + ε)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
+- Define a warp factor `Îµ âˆˆ [-Îµ_max, Îµ_max]`, scale `Ï„` âˆˆ [0, 1] to `(1 + Îµ)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
 - Enforce continuity at window edges by blending with the original signal using the Hann mask.
 
 ### 8.4 Strength Interpretation
-- `strength` controls γ and ε maxima; keep them ≤ 15% so morphology changes remain subtle.
-- Enforce per-beat caps (e.g., only edit one or two beats per 10 s window for strength ≤ 0.3).
+- `strength` controls Î³ and Îµ maxima; keep them â‰¤ 15% so morphology changes remain subtle.
+- Enforce per-beat caps (e.g., only edit one or two beats per 10â€¯s window for strength â‰¤ 0.3).
 
 ## 9. Interface: Strength & Time Knobs
 - `strength` is a normalized knob interpreted per perturbation family:
   - `smooth_adv`: L2 budget.
   - `baseline_wander` / `band_noise`: amplitude relative to per-lead std.
   - `morph_amp` / `morph_time`: bounding box for amplitude/time scaling.
-- `center_time` specifies the focal point in seconds (0 ≤ center_time ≤ 10). `window_seconds` defaults to 2 s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
+- `center_time` specifies the focal point in seconds (0â€¯â‰¤â€¯center_timeâ€¯â‰¤â€¯10). `window_seconds` defaults to 2â€¯s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
 
 Example defaults:
 ```python
@@ -547,7 +547,7 @@ perturbations/
   __init__.py
   config.py            # defaults, class-to-index map
   masks.py             # time-window utilities for NumPy / TensorFlow
-  metrics.py           # smoothness, L2/L∞ helpers
+  metrics.py           # smoothness, L2/Lâˆž helpers
   adv_smooth.py        # TensorFlow implementation of smooth_adv
   noise.py             # baseline_wander and band_noise
   morphology.py        # morph_amp / morph_time utilities
@@ -571,7 +571,7 @@ pred_adv = (model.predict(x_adv[None, ...]) >= 0.5)
    - Compare predicted label vectors (threshold 0.5) before and after perturbation.
    - Report untargeted ASR and per-class targeted success rates across `X_test`.
 2. **Perturbation Budgets:**
-   - L2/L∞ norms per record alongside strength values.
+   - L2/Lâˆž norms per record alongside strength values.
    - Smoothness metrics vs. baseline variability between beats.
 3. **Plausibility:**
    - Visual overlays of clean vs. perturbed signals for random samples (per lead).
@@ -592,13 +592,13 @@ With this alignment, the perturbation engine can be dropped into the existing Te
 # Design Document: Plausible ECG Perturbations for Targeted Misclassification
 
 ## 1. Context & Goals
-We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTB‑XL ECG segments stored under `ptb-xl/`. Each record is a 10 s, 12‑lead trace sampled at 100 Hz (1 000 samples × 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
+We train and evaluate a multi-label 1D CNN in `StartingFile.ipynb` that ingests PTBâ€‘XL ECG segments stored under `ptb-xl/`. Each record is a 10â€¯s, 12â€‘lead trace sampled at 100â€¯Hz (1â€¯000 samples Ã— 12 leads). Labels are aggregated with `MultiLabelBinarizer` into the five diagnostic superclasses `['CD', 'HYP', 'MI', 'NORM', 'STTC']`, and the model is optimized with `binary_crossentropy` plus accuracy and multi-label AUC. The objective of this work is to overlay small, plausible perturbations on top of these preprocessed tensors so that the trained TensorFlow model misclassifies either untargetedly (any change in the predicted label set) or in a targeted fashion (force or suppress a specific superclass), while keeping perturbations visually consistent with realistic physiology or acquisition artefacts.
 
 ## 2. Reference Training Pipeline Snapshot
 
 ### 2.1 Dataset & Labels
 - CSV metadata (`ptbxl_database.csv`) is read into `Y`, and `scp_codes` are expanded via `ast.literal_eval`.
-- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100 Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
+- Raw signals are loaded with `wfdb.rdsamp` using `filename_lr` (100â€¯Hz) and stacked into `X` with shape `(num_records, 1000, 12)`.
 - Diagnostic subclasses are aggregated through `scp_statements.csv`, filtered to the `diagnostic` rows, and mapped onto the five superclasses above.
 - A stratified split uses `strat_fold != 10` for training and `== 10` for testing, resulting in `(X_train, y_train)` and `(X_test, y_test)`. Encoding with `MultiLabelBinarizer` produces `y_*_enc` arrays of shape `(num_records, 5)`.
 
@@ -635,11 +635,11 @@ The perturbation pipeline must preserve these conventions: keep tensors in the `
 - **Type I (digital) white-box:** we directly edit stored test signals (`X_test`) and have access to model parameters and gradients via TensorFlow.
 - **Objectives:**
   - Untargeted: alter the predicted label set relative to the baseline set obtained with a 0.5 sigmoid threshold.
-  - Targeted: force a specific superclass to be predicted (set probability ≥ threshold) or suppress an existing positive class (probability < threshold).
+  - Targeted: force a specific superclass to be predicted (set probability â‰¥ threshold) or suppress an existing positive class (probability < threshold).
 - **Budget:** perturbations must stay within an L2 norm scaled by the `strength` knob and remain temporally localized via the `center_time` / `window_seconds` interface.
 
 ### 4.2 Plausibility Constraints
-- Preserve recognizable P–QRS–T morphology and heart rhythm.
+- Preserve recognizable Pâ€“QRSâ€“T morphology and heart rhythm.
 - Keep changes smooth in time and coherent across leads (no single-sample spikes).
 - Limit edits to windows that can pass as baseline wander, powerline noise, or small morphology variations.
 - Provide smooth onset/offset windows (Hann or cosine masks) and penalize high first-order derivatives of the perturbation.
@@ -681,14 +681,14 @@ def apply_perturbation(
 - All perturbation functions operate on NumPy arrays for compatibility with the notebook; gradient-based ones temporarily convert to `tf.Tensor` for differentiation.
 
 ### 5.3 Perturbation Families
-1. **Smooth adversarial perturbations** (`smooth_adv`) — gradient-driven, smooth, windowed.
-2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) — parametric noise injections.
-3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) — interpretable edits tied to detected beats.
+1. **Smooth adversarial perturbations** (`smooth_adv`) â€” gradient-driven, smooth, windowed.
+2. **Acquisition artefact simulations** (`baseline_wander`, `band_noise`) â€” parametric noise injections.
+3. **Morphology-aware local warps** (`morph_amp`, `morph_time`) â€” interpretable edits tied to detected beats.
 
 ## 6. Perturbation Family 1: Smooth Gradient-Based Adversary (`smooth_adv`)
 
 ### 6.1 Objective
-We optimize a mask-localized perturbation `δ` that maximizes misclassification while staying smooth and energy-bounded:
+We optimize a mask-localized perturbation `Î´` that maximizes misclassification while staying smooth and energy-bounded:
 
 \[
 L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} L_{\text{smooth}}(\delta) + \lambda_{\text{energy}} L_{\text{energy}}(\delta)
@@ -699,13 +699,13 @@ L(\delta) = w_{\text{cls}} L_{\text{cls}}(x + \delta) + \lambda_{\text{smooth}} 
 - `L_energy`: average squared magnitude.
 
 ### 6.2 Time Window Mask
-Given `center_time` and `window_seconds` (default 2 s), we compute sample indices at 100 Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10 s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
+Given `center_time` and `window_seconds` (default 2â€¯s), we compute sample indices at 100â€¯Hz, derive `[start, end)` bounds, and create a Hann window of length `end - start` that is embedded into a zero mask for the entire 10â€¯s record. The mask broadcasts over 12 leads to localize the perturbation smoothly.
 
 ### 6.3 Strength Mapping
-- `strength` ∈ [0, 1].
+- `strength` âˆˆ [0, 1].
 - `eps_global_max` (default 0.5) is expressed in the normalized input space (raw WFDB units for the current notebook). `eps_max = strength * eps_global_max`.
-- After each optimizer step we rescale `δ` to satisfy `||δ||₂ ≤ eps_max`.
-- `strength` can additionally scale `λ_smooth` and `λ_energy` (larger strengths relax the penalties).
+- After each optimizer step we rescale `Î´` to satisfy `||Î´||â‚‚ â‰¤ eps_max`.
+- `strength` can additionally scale `Î»_smooth` and `Î»_energy` (larger strengths relax the penalties).
 
 ### 6.4 TensorFlow Implementation Sketch
 ```python
@@ -766,50 +766,50 @@ def smooth_adversarial_perturbation(x_np, fs, config, model, y_true_vec):
 ```
 
 ### 6.5 Plausibility Checks
-- Log per-sample L2/L∞ norms in both normalized and µV units.
+- Log per-sample L2/Lâˆž norms in both normalized and ÂµV units.
 - Track `L_smooth` and energy penalties; abort or downscale when limits are exceeded.
 - Overlay `x`/`x_adv` for random records and ensure thresholded predictions changed as intended.
 
 ## 7. Perturbation Family 2: Acquisition-Style Noise
 
 ### 7.1 Baseline Wander (`baseline_wander`)
-- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2π f t + φ_c)` with `f ∈ [0.05, 0.5]` Hz and random phases.
-- Amplitude `A_c = strength * α * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
+- Generate per-lead low-frequency sinusoids `b_c(t) = A_c sin(2Ï€ f t + Ï†_c)` with `f âˆˆ [0.05, 0.5]` Hz and random phases.
+- Amplitude `A_c = strength * Î± * std_c`, where `std_c` is the per-lead standard deviation computed after whatever preprocessing is applied to the model input (currently raw values).
 - Apply the same Hann-mask window before adding to `x`.
 
 ### 7.2 Band-Limited Noise (`band_noise`)
-- Create white noise per lead, filter with a Butterworth band-pass (default 5–40 Hz), rescale to unit variance, then multiply by `strength * β * std_c`.
+- Create white noise per lead, filter with a Butterworth band-pass (default 5â€“40â€¯Hz), rescale to unit variance, then multiply by `strength * Î² * std_c`.
 - Window with the same mask and add to `x`.
 
-### 7.3 Combining with Adversarial δ
+### 7.3 Combining with Adversarial Î´
 - Generate `x_adv` via `smooth_adv`.
 - Draw a noise config (`baseline_wander` or `band_noise`) with its own `strength`, apply it to `x_adv`, and feed the result to the model.
 
 ## 8. Perturbation Family 3: Morphology-Aware Warps
 
 ### 8.1 Beat Detection
-- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100 Hz.
+- Use `wfdb.processing.xqrs_detect` (or a similar algorithm already bundled with WFDB, a dependency in `requirements.txt`) to precompute R-peak indices per record at 100â€¯Hz.
 - Cache results next to `X_test` to avoid recomputation inside the notebook.
 
 ### 8.2 Local Amplitude Scaling (`morph_amp`)
-- For beats within the selected time window, multiply samples in a Gaussian neighborhood (σ ≈ 80 ms by default) by a gain `1 + γ`, where `γ ∈ [-γ_max, γ_max]` and `γ_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
+- For beats within the selected time window, multiply samples in a Gaussian neighborhood (Ïƒ â‰ˆ 80â€¯ms by default) by a gain `1 + Î³`, where `Î³ âˆˆ [-Î³_max, Î³_max]` and `Î³_max` scales with `strength` (e.g., 0.03 at strength 0.2, up to 0.15 at strength 1.0).
 - Gains can be independent per lead or tied across limb/precordial groups to maintain clinical plausibility.
 
 ### 8.3 Local Time Warping (`morph_time`)
 - Select `[a, b]` windows surrounding each targeted beat (e.g., `r_k - 40` to `r_k + 60` samples).
-- Define a warp factor `ε ∈ [-ε_max, ε_max]`, scale `τ` ∈ [0, 1] to `(1 + ε)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
+- Define a warp factor `Îµ âˆˆ [-Îµ_max, Îµ_max]`, scale `Ï„` âˆˆ [0, 1] to `(1 + Îµ)`, clamp to [0,1], and resample the window via linear interpolation to stretch or compress the local waveform slightly.
 - Enforce continuity at window edges by blending with the original signal using the Hann mask.
 
 ### 8.4 Strength Interpretation
-- `strength` controls γ and ε maxima; keep them ≤ 15% so morphology changes remain subtle.
-- Enforce per-beat caps (e.g., only edit one or two beats per 10 s window for strength ≤ 0.3).
+- `strength` controls Î³ and Îµ maxima; keep them â‰¤ 15% so morphology changes remain subtle.
+- Enforce per-beat caps (e.g., only edit one or two beats per 10â€¯s window for strength â‰¤ 0.3).
 
 ## 9. Interface: Strength & Time Knobs
 - `strength` is a normalized knob interpreted per perturbation family:
   - `smooth_adv`: L2 budget.
   - `baseline_wander` / `band_noise`: amplitude relative to per-lead std.
   - `morph_amp` / `morph_time`: bounding box for amplitude/time scaling.
-- `center_time` specifies the focal point in seconds (0 ≤ center_time ≤ 10). `window_seconds` defaults to 2 s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
+- `center_time` specifies the focal point in seconds (0â€¯â‰¤â€¯center_timeâ€¯â‰¤â€¯10). `window_seconds` defaults to 2â€¯s but can be overridden. Both are applied uniformly regardless of family to keep the user API consistent.
 
 Example defaults:
 ```python
@@ -828,7 +828,7 @@ perturbations/
   __init__.py
   config.py            # defaults, class-to-index map
   masks.py             # time-window utilities for NumPy / TensorFlow
-  metrics.py           # smoothness, L2/L∞ helpers
+  metrics.py           # smoothness, L2/Lâˆž helpers
   adv_smooth.py        # TensorFlow implementation of smooth_adv
   noise.py             # baseline_wander and band_noise
   morphology.py        # morph_amp / morph_time utilities
@@ -852,7 +852,7 @@ pred_adv = (model.predict(x_adv[None, ...]) >= 0.5)
    - Compare predicted label vectors (threshold 0.5) before and after perturbation.
    - Report untargeted ASR and per-class targeted success rates across `X_test`.
 2. **Perturbation Budgets:**
-   - L2/L∞ norms per record alongside strength values.
+   - L2/Lâˆž norms per record alongside strength values.
    - Smoothness metrics vs. baseline variability between beats.
 3. **Plausibility:**
    - Visual overlays of clean vs. perturbed signals for random samples (per lead).
@@ -879,11 +879,11 @@ With this alignment, the perturbation engine can be dropped into the existing Te
    - Clamp `strength` to `[0,1]`.
    - Coerce `center_time` and `window_seconds` to floats.
 2. **Route by `ptype`**:
-   - `baseline_wander` → `noise.baseline_wander`.
-   - `band_noise` → `noise.band_limited_noise`.
-   - `smooth_adv` → `adv_smooth.smooth_adversarial_perturbation`.
-   - `morph_amp` → `morphology.local_amplitude_scaling`.
-   - `morph_time` → `morphology.local_time_warp`.
+   - `baseline_wander` â†’ `noise.baseline_wander`.
+   - `band_noise` â†’ `noise.band_limited_noise`.
+   - `smooth_adv` â†’ `adv_smooth.smooth_adversarial_perturbation`.
+   - `morph_amp` â†’ `morphology.local_amplitude_scaling`.
+   - `morph_time` â†’ `morphology.local_time_warp`.
 3. **Validate requirements**:
    - `smooth_adv` requires both `model` and `y_true`.
    - `morph_*` requires `r_peaks`.

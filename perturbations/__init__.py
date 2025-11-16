@@ -15,7 +15,7 @@ from .evaluation import (
 )
 from .morphology import detect_r_peaks, local_amplitude_scaling, local_time_warp
 from .noise import band_limited_noise, baseline_wander
-from .visualization import (
+from visualization import (
     plot_asr_vs_strength,
     plot_classwise_metric_bars,
     plot_norm_distributions,
