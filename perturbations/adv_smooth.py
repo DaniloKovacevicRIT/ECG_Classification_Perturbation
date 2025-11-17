@@ -12,6 +12,7 @@ import tensorflow as tf
 
 from .config import CLASS_TO_INDEX, ensure_lead_axis
 from .masks import build_time_mask
+from .tf_utils import tf_device_scope
 
 
 @dataclass(frozen=True)
@@ -82,68 +83,69 @@ def smooth_adversarial_perturbation(
     if y_true is None:
         raise ValueError("smooth_adv requires the true label vector.")
 
-    x_np = ensure_lead_axis(np.asarray(x, dtype=np.float32))
-    tensor_x = tf.convert_to_tensor(x_np[None, ...])  # (1, L, C)
-    delta_param = tf.Variable(tf.zeros_like(tensor_x), trainable=True)
+    with tf_device_scope():
+        x_np = ensure_lead_axis(np.asarray(x, dtype=np.float32))
+        tensor_x = tf.convert_to_tensor(x_np[None, ...])  # (1, L, C)
+        delta_param = tf.Variable(tf.zeros_like(tensor_x), trainable=True)
 
-    defaults = SMOOTH_ADV_DEFAULTS
-    extra = config.extra or {}
-    eps_max = extra.get("eps_global_max", defaults.eps_global_max) * config.strength
-    lambda_smooth = extra.get("lambda_smooth", defaults.lambda_smooth)
-    lambda_energy = extra.get("lambda_energy", defaults.lambda_energy)
-    steps = int(extra.get("steps", defaults.steps))
-    lr = extra.get("lr", defaults.learning_rate)
-    target_mode = extra.get("target_mode", "force")
-    target_value = extra.get("target_value", 1.0)
+        defaults = SMOOTH_ADV_DEFAULTS
+        extra = config.extra or {}
+        eps_max = extra.get("eps_global_max", defaults.eps_global_max) * config.strength
+        lambda_smooth = extra.get("lambda_smooth", defaults.lambda_smooth)
+        lambda_energy = extra.get("lambda_energy", defaults.lambda_energy)
+        steps = int(extra.get("steps", defaults.steps))
+        lr = extra.get("lr", defaults.learning_rate)
+        target_mode = extra.get("target_mode", "force")
+        target_value = extra.get("target_value", 1.0)
 
-    mask = _build_time_mask_tf(
-        tensor_x.shape[1],
-        fs,
-        config.center_time,
-        config.window_seconds,
-    )
+        mask = _build_time_mask_tf(
+            tensor_x.shape[1],
+            fs,
+            config.center_time,
+            config.window_seconds,
+        )
 
-    y_true_tf, y_target_tf = _prepare_targets(
-        y_true,
-        target_class=config.target_class,
-        target_mode=target_mode,
-        target_value=target_value,
-    )
+        y_true_tf, y_target_tf = _prepare_targets(
+            y_true,
+            target_class=config.target_class,
+            target_mode=target_mode,
+            target_value=target_value,
+        )
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-    bce = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        bce = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
-    @tf.function
-    def _train_step():
-        with tf.GradientTape() as tape:
-            delta = delta_param * mask
-            norm = tf.norm(delta)
-            if eps_max > 0:
-                delta = tf.cond(
-                    norm > eps_max,
-                    lambda: delta * (eps_max / (norm + 1e-8)),
-                    lambda: delta,
+        @tf.function
+        def _train_step():
+            with tf.GradientTape() as tape:
+                delta = delta_param * mask
+                norm = tf.norm(delta)
+                if eps_max > 0:
+                    delta = tf.cond(
+                        norm > eps_max,
+                        lambda: delta * (eps_max / (norm + 1e-8)),
+                        lambda: delta,
+                    )
+                x_adv = tensor_x + delta
+                logits = model(x_adv, training=False)
+                if config.target_class is None:
+                    cls_loss = -bce(y_true_tf, logits)
+                else:
+                    cls_loss = bce(y_target_tf, logits)
+                smooth_loss = tf.reduce_mean(
+                    tf.square(delta[:, 1:, :] - delta[:, :-1, :])
                 )
-            x_adv = tensor_x + delta
-            logits = model(x_adv, training=False)
-            if config.target_class is None:
-                cls_loss = -bce(y_true_tf, logits)
-            else:
-                cls_loss = bce(y_target_tf, logits)
-            smooth_loss = tf.reduce_mean(
-                tf.square(delta[:, 1:, :] - delta[:, :-1, :])
-            )
-            energy_loss = tf.reduce_mean(tf.square(delta))
-            loss = cls_loss + lambda_smooth * smooth_loss + lambda_energy * energy_loss
-        grads = tape.gradient(loss, [delta_param])
-        optimizer.apply_gradients(zip(grads, [delta_param]))
+                energy_loss = tf.reduce_mean(tf.square(delta))
+                loss = cls_loss + lambda_smooth * smooth_loss + lambda_energy * energy_loss
+            grads = tape.gradient(loss, [delta_param])
+            optimizer.apply_gradients(zip(grads, [delta_param]))
 
-    for _ in range(steps):
-        _train_step()
+        for _ in range(steps):
+            _train_step()
 
-    delta = delta_param * mask
-    norm = tf.norm(delta)
-    if eps_max > 0 and norm > eps_max:
-        delta = delta * (eps_max / (norm + 1e-8))
-    x_adv = tensor_x + delta
-    return x_adv.numpy()[0], delta.numpy()[0]
+        delta = delta_param * mask
+        norm = tf.norm(delta)
+        if eps_max > 0 and norm > eps_max:
+            delta = delta * (eps_max / (norm + 1e-8))
+        x_adv = tensor_x + delta
+        return x_adv.numpy()[0], delta.numpy()[0]

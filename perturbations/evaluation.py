@@ -19,6 +19,7 @@ from sklearn import metrics as sk_metrics
 
 from .api import PerturbationConfig, apply_perturbation
 from .config import CLASS_TO_INDEX, CLASS_NAMES
+from .tf_utils import tf_device_scope
 
 DEFAULT_STRENGTH_SCHEDULE: Tuple[float, ...] = (0.10, 0.20, 0.35, 0.50)
 
@@ -55,7 +56,9 @@ def predict_proba_single(model, x: np.ndarray) -> np.ndarray:
     """
 
     x = np.asarray(x, dtype=np.float32)
-    return np.asarray(model.predict(x[None, ...], verbose=0)[0])
+    with tf_device_scope():
+        proba = model.predict(x[None, ...], verbose=0)
+    return np.asarray(proba[0])
 
 
 def predict_proba_batch(model, X: np.ndarray) -> np.ndarray:
@@ -64,7 +67,9 @@ def predict_proba_batch(model, X: np.ndarray) -> np.ndarray:
     """
 
     X = np.asarray(X, dtype=np.float32)
-    return np.asarray(model.predict(X, verbose=0))
+    with tf_device_scope():
+        proba = model.predict(X, verbose=0)
+    return np.asarray(proba)
 
 
 def binarize_predictions(proba: np.ndarray, threshold: float = 0.5) -> np.ndarray:
@@ -383,18 +388,19 @@ def compute_time_saliency(
     _ = fs  # kept for signature clarity; currently unused but reserved for future logic.
     x_np = np.asarray(x_clean, dtype=np.float32)
     y_np = np.asarray(y_true_vec, dtype=np.float32).reshape(1, -1)
-    tensor_x = tf.convert_to_tensor(x_np[None, ...])
-    tensor_y = tf.convert_to_tensor(y_np)
-    bce = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+    with tf_device_scope():
+        tensor_x = tf.convert_to_tensor(x_np[None, ...])
+        tensor_y = tf.convert_to_tensor(y_np)
+        bce = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
-    with tf.GradientTape() as tape:
-        tape.watch(tensor_x)
-        proba = model(tensor_x, training=False)
-        loss = bce(tensor_y, proba)
-    grads = tape.gradient(loss, tensor_x)
-    if grads is None:
-        raise RuntimeError("Unable to compute gradients for saliency.")
-    grad_np = grads.numpy()[0]
+        with tf.GradientTape() as tape:
+            tape.watch(tensor_x)
+            proba = model(tensor_x, training=False)
+            loss = bce(tensor_y, proba)
+        grads = tape.gradient(loss, tensor_x)
+        if grads is None:
+            raise RuntimeError("Unable to compute gradients for saliency.")
+        grad_np = grads.numpy()[0]
     saliency = np.linalg.norm(grad_np, ord=2, axis=-1)
     if smooth_size > 1:
         saliency = uniform_filter1d(saliency, size=smooth_size, mode="nearest")

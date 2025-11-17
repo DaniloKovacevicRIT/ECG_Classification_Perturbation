@@ -21,6 +21,7 @@ import tensorflow as tf
 
 from perturbations.config import CLASS_NAMES
 from perturbations.data_utils import load_ptbxl_split
+from perturbations.tf_utils import configure_tensorflow_device, tf_device_scope
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +42,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument(
+        "--device",
+        type=str,
+        choices=["auto", "cpu", "gpu"],
+        default="auto",
+        help="TensorFlow device to run on ('auto' prefers GPU when available).",
+    )
     return parser.parse_args()
 
 
@@ -62,6 +70,7 @@ def build_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
 
 def main() -> None:
     args = parse_args()
+    device = configure_tensorflow_device(args.device)
     ptb_root = args.ptb_root.resolve()
     if not ptb_root.exists():
         raise FileNotFoundError(f"PTB-XL root {ptb_root} does not exist.")
@@ -77,36 +86,40 @@ def main() -> None:
     X_train, y_train, _ = train_split
     X_test, y_test, test_ids = test_split
 
-    model = build_model(input_shape=X_train.shape[1:])
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
-    auc = tf.keras.metrics.AUC(
-        multi_label=True,
-        num_labels=len(CLASS_NAMES),
-        name="auc",
-    )
-    model.compile(optimizer=optimizer, loss="binary_crossentropy", metrics=["accuracy", auc])
-
-    callbacks = [
-        tf.keras.callbacks.EarlyStopping(
-            patience=3, restore_best_weights=True, monitor="val_auc", mode="max"
-        )
-    ]
-    history = model.fit(
-        X_train,
-        y_train,
-        validation_data=(X_test, y_test),
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        callbacks=callbacks,
-        verbose=2,
-    )
-    print(f"Training complete. Final val metrics: {history.history['val_auc'][-1]:.4f} (AUC)")
-
     output_path = args.output
-    if output_path.suffix.lower() not in {".keras", ".h5"}:
-        output_path = output_path.with_suffix(".keras")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    model.save(output_path)
+    with tf_device_scope(device):
+        model = build_model(input_shape=X_train.shape[1:])
+        optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
+        auc = tf.keras.metrics.AUC(
+            multi_label=True,
+            num_labels=len(CLASS_NAMES),
+            name="auc",
+        )
+        model.compile(optimizer=optimizer, loss="binary_crossentropy", metrics=["accuracy", auc])
+
+        callbacks = [
+            tf.keras.callbacks.EarlyStopping(
+                patience=3, restore_best_weights=True, monitor="val_auc", mode="max"
+            )
+        ]
+        history = model.fit(
+            X_train,
+            y_train,
+            validation_data=(X_test, y_test),
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            callbacks=callbacks,
+            verbose=2,
+        )
+        final_val_auc = float(history.history["val_auc"][-1])
+
+        if output_path.suffix.lower() not in {".keras", ".h5"}:
+            output_path = output_path.with_suffix(".keras")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        model.save(output_path)
+
+    print(f"Training complete. Final val metrics: {final_val_auc:.4f} (AUC)")
+
     print(f"Saved model to {output_path}")
 
     if args.export_eval:
